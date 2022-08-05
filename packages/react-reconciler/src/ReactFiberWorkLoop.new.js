@@ -2936,6 +2936,18 @@ function invokeEffectsInDev(
 
     let current = firstChild;
     let subtreeRoot = null;
+
+    const setNextCurrent = () => {
+      if (current === null) {
+        return;
+      }
+      if (current.sibling !== null) {
+        current = current.sibling;
+      } else {
+        current = subtreeRoot = current.return;
+      }
+    };
+
     while (current !== null) {
       const primarySubtreeFlag = current.subtreeFlags & fiberFlags;
       if (
@@ -2943,17 +2955,19 @@ function invokeEffectsInDev(
         current.child !== null &&
         primarySubtreeFlag !== NoFlags
       ) {
-        current = current.child;
+        if (
+          current.child.tag === OffscreenComponent &&
+          current.child.pendingProps.mode === 'hidden'
+        ) {
+          setNextCurrent();
+        } else {
+          current = current.child;
+        }
       } else {
         if ((current.flags & fiberFlags) !== NoFlags) {
           invokeEffectFn(current);
         }
-
-        if (current.sibling !== null) {
-          current = current.sibling;
-        } else {
-          current = subtreeRoot = current.return;
-        }
+        setNextCurrent();
       }
     }
   }
