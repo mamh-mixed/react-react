@@ -1955,7 +1955,7 @@ describe('ReactDOMInput', () => {
       if (disableInputAttributeSyncing) {
         expect(input.getAttribute('value')).toBe(null);
       } else {
-        expect(input.getAttribute('value')).toBe('first');
+        expect(input.getAttribute('value')).toBe('latest');
       }
     });
 
@@ -2003,9 +2003,9 @@ describe('ReactDOMInput', () => {
         'A component is changing a controlled input to be uncontrolled.',
       ]);
       if (disableInputAttributeSyncing) {
-        expect(input.hasAttribute('value')).toBe(false);
+        expect(input.getAttribute('value')).toBe(null);
       } else {
-        expect(input.getAttribute('value')).toBe('first');
+        expect(input.getAttribute('value')).toBe('latest');
       }
     });
 
@@ -2164,5 +2164,53 @@ describe('ReactDOMInput', () => {
       expect(node.value).toBe('on');
       expect(node.hasAttribute('value')).toBe(false);
     });
+  });
+
+  it('should remove previous `defaultValue`', () => {
+    const node = ReactDOM.render(
+      <input type="text" defaultValue="0" />,
+      container,
+    );
+
+    expect(node.value).toBe('0');
+    expect(node.defaultValue).toBe('0');
+
+    ReactDOM.render(<input type="text" />, container);
+    expect(node.defaultValue).toBe('');
+  });
+
+  it('should treat `defaultValue={null}` as missing', () => {
+    const node = ReactDOM.render(
+      <input type="text" defaultValue="0" />,
+      container,
+    );
+
+    expect(node.value).toBe('0');
+    expect(node.defaultValue).toBe('0');
+
+    ReactDOM.render(<input type="text" defaultValue={null} />, container);
+    expect(node.defaultValue).toBe('');
+  });
+
+  it('should notice input changes when reverting back to original value', () => {
+    const log = [];
+    function onChange(e) {
+      log.push(e.target.value);
+    }
+    ReactDOM.render(
+      <input type="text" value="" onChange={onChange} />,
+      container,
+    );
+    ReactDOM.render(
+      <input type="text" value="a" onChange={onChange} />,
+      container,
+    );
+
+    const node = container.firstChild;
+    setUntrackedValue.call(node, '');
+    dispatchEventOnNode(node, 'input');
+
+    expect(log).toEqual(['']);
+    expect(node.value).toBe('a');
   });
 });

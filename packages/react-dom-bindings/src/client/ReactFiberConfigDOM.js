@@ -47,6 +47,7 @@ import {
   setInitialProperties,
   diffProperties,
   updateProperties,
+  updatePropertiesWithDiff,
   diffHydratedProperties,
   diffHydratedText,
   trapClickOnNonInteractiveElement,
@@ -58,7 +59,11 @@ import {
 } from './ReactDOMComponent';
 import {getSelectionInformation, restoreSelection} from './ReactInputSelection';
 import setTextContent from './setTextContent';
-import {validateDOMNesting, updatedAncestorInfoDev} from './validateDOMNesting';
+import {
+  validateDOMNesting,
+  validateTextNesting,
+  updatedAncestorInfoDev,
+} from './validateDOMNesting';
 import {
   isEnabled as ReactBrowserEventEmitterIsEnabled,
   setEnabled as ReactBrowserEventEmitterSetEnabled,
@@ -86,6 +91,7 @@ import {
   enableFloat,
   enableHostSingletons,
   enableTrustedTypesIntegration,
+  diffInCommitPhase,
 } from 'shared/ReactFeatureFlags';
 import {
   HostComponent,
@@ -326,18 +332,7 @@ export function createInstance(
   if (__DEV__) {
     // TODO: take namespace into account when validating.
     const hostContextDev: HostContextDev = (hostContext: any);
-    validateDOMNesting(type, null, hostContextDev.ancestorInfo);
-    if (
-      typeof props.children === 'string' ||
-      typeof props.children === 'number'
-    ) {
-      const string = '' + props.children;
-      const ownAncestorInfo = updatedAncestorInfoDev(
-        hostContextDev.ancestorInfo,
-        type,
-      );
-      validateDOMNesting(null, string, ownAncestorInfo);
-    }
+    validateDOMNesting(type, hostContextDev.ancestorInfo);
     namespace = hostContextDev.namespace;
   } else {
     const hostContextProd: HostContextProd = (hostContext: any);
@@ -485,20 +480,9 @@ export function prepareUpdate(
   newProps: Props,
   hostContext: HostContext,
 ): null | Array<mixed> {
-  if (__DEV__) {
-    const hostContextDev = ((hostContext: any): HostContextDev);
-    if (
-      typeof newProps.children !== typeof oldProps.children &&
-      (typeof newProps.children === 'string' ||
-        typeof newProps.children === 'number')
-    ) {
-      const string = '' + newProps.children;
-      const ownAncestorInfo = updatedAncestorInfoDev(
-        hostContextDev.ancestorInfo,
-        type,
-      );
-      validateDOMNesting(null, string, ownAncestorInfo);
-    }
+  if (diffInCommitPhase) {
+    // TODO: Figure out how to validateDOMNesting when children turn into a string.
+    return null;
   }
   return diffProperties(domElement, type, oldProps, newProps);
 }
@@ -523,7 +507,10 @@ export function createTextInstance(
 ): TextInstance {
   if (__DEV__) {
     const hostContextDev = ((hostContext: any): HostContextDev);
-    validateDOMNesting(null, text, hostContextDev.ancestorInfo);
+    const ancestor = hostContextDev.ancestorInfo.current;
+    if (ancestor != null) {
+      validateTextNesting(text, ancestor.tag);
+    }
   }
   const textNode: TextInstance = getOwnerDocumentFromRootContainer(
     rootContainerInstance,
@@ -642,14 +629,26 @@ export function commitMount(
 
 export function commitUpdate(
   domElement: Instance,
-  updatePayload: Array<mixed>,
+  updatePayload: any,
   type: string,
   oldProps: Props,
   newProps: Props,
   internalInstanceHandle: Object,
 ): void {
-  // Apply the diff to the DOM node.
-  updateProperties(domElement, updatePayload, type, oldProps, newProps);
+  if (diffInCommitPhase) {
+    // Diff and update the properties.
+    updateProperties(domElement, type, oldProps, newProps);
+  } else {
+    // Apply the diff to the DOM node.
+    updatePropertiesWithDiff(
+      domElement,
+      updatePayload,
+      type,
+      oldProps,
+      newProps,
+    );
+  }
+
   // Update the props handle so that we know which props are the ones with
   // with current event handlers.
   updateFiberProps(domElement, newProps);
@@ -1738,7 +1737,7 @@ export function resolveSingletonInstance(
   if (__DEV__) {
     const hostContextDev = ((hostContext: any): HostContextDev);
     if (validateDOMNestingDev) {
-      validateDOMNesting(type, null, hostContextDev.ancestorInfo);
+      validateDOMNesting(type, hostContextDev.ancestorInfo);
     }
   }
   const ownerDocument = getOwnerDocumentFromRootContainer(
